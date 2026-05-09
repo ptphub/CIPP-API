@@ -157,15 +157,15 @@ function Invoke-CIPPStandardSPFileRequests {
         $CurrentValue = @{
             CoreRequestFilesLinkEnabled              = $CurrentState.CoreRequestFilesLinkEnabled
             OneDriveRequestFilesLinkEnabled          = $CurrentState.OneDriveRequestFilesLinkEnabled
-            CoreRequestFilesLinkExpirationInDays     = $CurrentState.CoreRequestFilesLinkExpirationInDays
-            OneDriveRequestFilesLinkExpirationInDays = $CurrentState.OneDriveRequestFilesLinkExpirationInDays
+            CoreRequestFilesLinkExpirationInDays     = if ($null -ne $ExpirationDays -and $WantedState -eq $true) { $CurrentState.CoreRequestFilesLinkExpirationInDays } else { $null }
+            OneDriveRequestFilesLinkExpirationInDays = if ($null -ne $ExpirationDays -and $WantedState -eq $true) { $CurrentState.OneDriveRequestFilesLinkExpirationInDays } else { $null }
             SharingCapability                        = $SharingCapabilityEnum[$CurrentState.SharingCapability]
         }
         $ExpectedValue = @{
             CoreRequestFilesLinkEnabled              = $WantedState
             OneDriveRequestFilesLinkEnabled          = $WantedState
-            CoreRequestFilesLinkExpirationInDays     = if ($null -ne $ExpirationDays -and $WantedState -eq $true) { $ExpirationDays } else { $null }
-            OneDriveRequestFilesLinkExpirationInDays = if ($null -ne $ExpirationDays -and $WantedState -eq $true) { $ExpirationDays } else { $null }
+            CoreRequestFilesLinkExpirationInDays     = if ($null -ne $ExpirationDays) { $ExpirationDays } else { $CurrentState.CoreRequestFilesLinkExpirationInDays }
+            OneDriveRequestFilesLinkExpirationInDays = if ($null -ne $ExpirationDays) { $ExpirationDays } else { $CurrentState.OneDriveRequestFilesLinkExpirationInDays }
             SharingCapability                        = if ($WantedState -eq $true) { 'External Users and Guests (Anyone)' } else { $SharingCapabilityEnum[$CurrentState.SharingCapability] }
         }
         Set-CIPPStandardsCompareField -FieldName 'standards.SPFileRequests' -CurrentValue $CurrentValue -ExpectedValue $ExpectedValue -Tenant $Tenant
