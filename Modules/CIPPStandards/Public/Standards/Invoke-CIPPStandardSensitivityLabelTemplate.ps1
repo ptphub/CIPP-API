@@ -64,20 +64,6 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
         'PolicyTemplateInfo'
     )
 
-    function ConvertTo-CleanFromAllowlist {
-        param($Source, [string[]]$Allowed)
-        $clean = @{}
-        foreach ($prop in $Source.PSObject.Properties) {
-            if ($prop.Name -notin $Allowed) { continue }
-            $val = $prop.Value
-            if ($null -eq $val) { continue }
-            if ($val -is [string] -and [string]::IsNullOrWhiteSpace($val)) { continue }
-            if (($val -is [array] -or $val -is [System.Collections.IList]) -and @($val).Count -eq 0) { continue }
-            $clean[$prop.Name] = $val
-        }
-        return $clean
-    }
-
     $TemplateSelection = $Settings.sensitivityLabelTemplate ?? $Settings.TemplateList ?? $Settings.'standards.SensitivityLabelTemplate.TemplateIds'
     $TemplateIds = @($TemplateSelection | ForEach-Object {
             if ($_ -is [string]) { $_ } elseif ($_.value) { $_.value } else { $null }
@@ -115,7 +101,7 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
         foreach ($Template in @($Templates)) {
             $TemplateName = $Template.Name ?? $Template.name
             try {
-                $LabelParams = ConvertTo-CleanFromAllowlist -Source $Template -Allowed $LabelAllowedFields
+                $LabelParams = Format-CIPPCompliancePolicyParams -Source $Template -AllowedFields $LabelAllowedFields
                 $LabelExists = [bool]($ExistingLabels | Where-Object { $_.Name -eq $TemplateName -or $_.DisplayName -eq $TemplateName })
 
                 if ($LabelExists) {
@@ -131,7 +117,7 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
 
                 $PolicySource = $Template.PolicyParams
                 if ($PolicySource) {
-                    $PolicyHash = ConvertTo-CleanFromAllowlist -Source $PolicySource -Allowed $PolicyAllowedFields
+                    $PolicyHash = Format-CIPPCompliancePolicyParams -Source $PolicySource -AllowedFields $PolicyAllowedFields
                     if (-not $PolicyHash.ContainsKey('Labels') -or -not $PolicyHash['Labels']) {
                         $PolicyHash['Labels'] = @($TemplateName)
                     }
@@ -145,8 +131,14 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
                     $LabelPolicyExists = [bool]($ExistingLabelPolicies | Where-Object { $_.Name -eq $PolicyName })
 
                     if ($LabelPolicyExists) {
-                        $SetPolicyHash = @{} + $PolicyHash
-                        $SetPolicyHash.Remove('Name')
+                        # Set-LabelPolicy uses Add{Location}/Remove{Location} pairs and AddLabels/RemoveLabels.
+                        $LabelPolicyAddPrefixed = @('Labels') + ($PolicyAllowedFields | Where-Object { $_ -like '*Location*' })
+                        $SetPolicyHash = @{}
+                        foreach ($key in $PolicyHash.Keys) {
+                            if ($key -eq 'Name') { continue }
+                            $targetKey = if ($key -in $LabelPolicyAddPrefixed) { "Add$key" } else { $key }
+                            $SetPolicyHash[$targetKey] = $PolicyHash[$key]
+                        }
                         $SetPolicyHash['Identity'] = $PolicyName
                         $null = New-ExoRequest -tenantid $Tenant -cmdlet 'Set-LabelPolicy' -cmdParams $SetPolicyHash -Compliance -useSystemMailbox $true
                         Write-LogMessage -API 'Standards' -tenant $Tenant -message "Updated sensitivity label policy '$PolicyName'" -sev Info
@@ -162,11 +154,10 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
         }
     }
 
-    $MissingLabels = foreach ($Template in @($Templates)) {
-        $TemplateName = $Template.Name ?? $Template.name
-        if (-not ($ExistingLabels | Where-Object { $_.Name -eq $TemplateName -or $_.DisplayName -eq $TemplateName })) { $TemplateName }
-    }
-    $MissingLabels = @($MissingLabels)
+    $MissingLabels = @(foreach ($Template in @($Templates)) {
+            $TemplateName = $Template.Name ?? $Template.name
+            if (-not ($ExistingLabels | Where-Object { $_.Name -eq $TemplateName -or $_.DisplayName -eq $TemplateName })) { $TemplateName }
+        })
 
     if ($Settings.alert -eq $true) {
         if ($MissingLabels.Count -eq 0) {

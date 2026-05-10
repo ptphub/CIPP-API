@@ -7,7 +7,7 @@ function Invoke-CIPPStandardDlpCompliancePolicyTemplate {
     .SYNOPSIS
         (Label) DLP Compliance Policy Template
     .DESCRIPTION
-        (Helptext) Deploy Microsoft Purview DLP compliance policies from CIPP templates. Existing policies and rules are overwritten in place.
+        (Helptext) Deploy Microsoft Purview DLP compliance policies from CIPP templates. Existing policies are overwritten in place.
         (DocsDescription) Deploy Microsoft Purview DLP compliance policies from CIPP templates. If a policy or rule with the same name already exists in the tenant, it is updated in place; otherwise it is created.
     .NOTES
         MULTI
@@ -65,53 +65,7 @@ function Invoke-CIPPStandardDlpCompliancePolicyTemplate {
         'ContentCharacterSetContainsWords', 'ContentFileTypeMatches'
     )
 
-    $LocationProperties = @(
-        'ExchangeLocation', 'ExchangeLocationException',
-        'SharePointLocation', 'SharePointLocationException',
-        'OneDriveLocation', 'OneDriveLocationException',
-        'TeamsLocation', 'TeamsLocationException',
-        'EndpointDlpLocation', 'EndpointDlpLocationException',
-        'OnPremisesScannerDlpLocation', 'OnPremisesScannerDlpLocationException',
-        'ThirdPartyAppDlpLocation', 'ThirdPartyAppDlpLocationException',
-        'PowerBIDlpLocation', 'PowerBIDlpLocationException',
-        'ModernGroupLocation', 'ModernGroupLocationException'
-    )
-
-    function ConvertTo-LocationValue {
-        param($Value)
-        if ($null -eq $Value) { return $null }
-        if ($Value -is [string]) { return $Value }
-        $items = @($Value) | ForEach-Object {
-            if ($null -eq $_) { return }
-            if ($_ -is [string]) { $_ }
-            elseif ($_.Name) { $_.Name }
-            elseif ($_.PrimarySmtpAddress) { $_.PrimarySmtpAddress }
-            elseif ($_.DisplayName) { $_.DisplayName }
-        } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-        if ($items.Count -eq 0) { return $null }
-        if ($items -contains 'All') { return 'All' }
-        return @($items)
-    }
-
-    function ConvertTo-CleanFromAllowlist {
-        param($Source, [string[]]$Allowed, [string[]]$Locations)
-        $clean = @{}
-        foreach ($prop in $Source.PSObject.Properties) {
-            if ($prop.Name -notin $Allowed) { continue }
-            $val = $prop.Value
-            if ($null -eq $val) { continue }
-            if ($val -is [string] -and [string]::IsNullOrWhiteSpace($val)) { continue }
-            if (($val -is [array] -or $val -is [System.Collections.IList]) -and @($val).Count -eq 0) { continue }
-            if ($Locations -and $prop.Name -in $Locations) {
-                $normalized = ConvertTo-LocationValue -Value $val
-                if ($null -eq $normalized) { continue }
-                $clean[$prop.Name] = $normalized
-            } else {
-                $clean[$prop.Name] = $val
-            }
-        }
-        return $clean
-    }
+    $LocationFields = $PolicyAllowedFields | Where-Object { $_ -like '*Location*' }
 
     $TemplateSelection = $Settings.dlpCompliancePolicyTemplate ?? $Settings.TemplateList ?? $Settings.'standards.DlpCompliancePolicyTemplate.TemplateIds'
     $TemplateIds = @($TemplateSelection | ForEach-Object {
@@ -150,7 +104,7 @@ function Invoke-CIPPStandardDlpCompliancePolicyTemplate {
         foreach ($Template in @($Templates)) {
             $TemplateName = $Template.Name ?? $Template.name
             try {
-                $PolicyParams = ConvertTo-CleanFromAllowlist -Source $Template -Allowed $PolicyAllowedFields -Locations $LocationProperties
+                $PolicyParams = Format-CIPPCompliancePolicyParams -Source $Template -AllowedFields $PolicyAllowedFields -LocationFields $LocationFields
                 $PolicyExists = [bool]($ExistingPolicies | Where-Object { $_.Name -eq $TemplateName })
 
                 if ($PolicyExists) {
@@ -166,7 +120,7 @@ function Invoke-CIPPStandardDlpCompliancePolicyTemplate {
 
                 $RuleSource = $Template.RuleParams
                 if ($RuleSource) {
-                    $RuleHash = ConvertTo-CleanFromAllowlist -Source $RuleSource -Allowed $RuleAllowedFields
+                    $RuleHash = Format-CIPPCompliancePolicyParams -Source $RuleSource -AllowedFields $RuleAllowedFields
                     $RuleHash['Policy'] = $TemplateName
                     $RuleName = if ($RuleHash.ContainsKey('Name') -and -not [string]::IsNullOrWhiteSpace([string]$RuleHash['Name'])) {
                         $RuleHash['Name']
@@ -196,11 +150,10 @@ function Invoke-CIPPStandardDlpCompliancePolicyTemplate {
         }
     }
 
-    $MissingPolicies = foreach ($Template in @($Templates)) {
-        $TemplateName = $Template.Name ?? $Template.name
-        if (-not ($ExistingPolicies | Where-Object { $_.Name -eq $TemplateName })) { $TemplateName }
-    }
-    $MissingPolicies = @($MissingPolicies)
+    $MissingPolicies = @(foreach ($Template in @($Templates)) {
+            $TemplateName = $Template.Name ?? $Template.name
+            if (-not ($ExistingPolicies | Where-Object { $_.Name -eq $TemplateName })) { $TemplateName }
+        })
 
     if ($Settings.alert -eq $true) {
         if ($MissingPolicies.Count -eq 0) {
