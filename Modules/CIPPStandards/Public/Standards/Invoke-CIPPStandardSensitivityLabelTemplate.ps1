@@ -105,9 +105,7 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
                 $LabelExists = [bool]($ExistingLabels | Where-Object { $_.Name -eq $TemplateName -or $_.DisplayName -eq $TemplateName })
 
                 if ($LabelExists) {
-                    $SetParams = @{} + $LabelParams
-                    $SetParams.Remove('Name')
-                    $SetParams['Identity'] = $TemplateName
+                    $SetParams = ConvertTo-CIPPComplianceSetParams -Params $LabelParams -Identity $TemplateName
                     $null = New-ExoRequest -tenantid $Tenant -cmdlet 'Set-Label' -cmdParams $SetParams -Compliance -useSystemMailbox $true
                     Write-LogMessage -API 'Standards' -tenant $Tenant -message "Updated sensitivity label '$TemplateName' in place" -sev Info
                 } else {
@@ -131,15 +129,8 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
                     $LabelPolicyExists = [bool]($ExistingLabelPolicies | Where-Object { $_.Name -eq $PolicyName })
 
                     if ($LabelPolicyExists) {
-                        # Set-LabelPolicy uses Add{Location}/Remove{Location} pairs and AddLabels/RemoveLabels.
                         $LabelPolicyAddPrefixed = @('Labels') + ($PolicyAllowedFields | Where-Object { $_ -like '*Location*' })
-                        $SetPolicyHash = @{}
-                        foreach ($key in $PolicyHash.Keys) {
-                            if ($key -eq 'Name') { continue }
-                            $targetKey = if ($key -in $LabelPolicyAddPrefixed) { "Add$key" } else { $key }
-                            $SetPolicyHash[$targetKey] = $PolicyHash[$key]
-                        }
-                        $SetPolicyHash['Identity'] = $PolicyName
+                        $SetPolicyHash = ConvertTo-CIPPComplianceSetParams -Params $PolicyHash -Identity $PolicyName -AddPrefixFields $LabelPolicyAddPrefixed
                         $null = New-ExoRequest -tenantid $Tenant -cmdlet 'Set-LabelPolicy' -cmdParams $SetPolicyHash -Compliance -useSystemMailbox $true
                         Write-LogMessage -API 'Standards' -tenant $Tenant -message "Updated sensitivity label policy '$PolicyName'" -sev Info
                     } else {
