@@ -15,7 +15,7 @@ function Invoke-CIPPStandardRetentionCompliancePolicyTemplate {
         CAT
             Templates
         DISABLEDFEATURES
-            {"report":false,"warn":true,"remediate":false}
+            {"report":false,"warn":false,"remediate":false}
         IMPACT
             Medium Impact
         ADDEDDATE
@@ -31,14 +31,32 @@ function Invoke-CIPPStandardRetentionCompliancePolicyTemplate {
     #>
     param($Tenant, $Settings)
 
-    $ReadOnlyProperties = @(
-        'GUID', 'comments', 'RuleParams',
-        'Workload', 'DistributionStatus', 'DistributionResults', 'LastStatusUpdate',
-        'Enabled', 'Identity', 'Guid', 'Id', 'ImmutableId', 'IsValid',
-        'WhenCreated', 'WhenChanged', 'WhenCreatedUTC', 'WhenChangedUTC',
-        'CreatedBy', 'ModifiedBy', 'LastModifiedBy', 'ObjectState',
-        'PolicyCategory', 'PolicyVersion', 'Type', 'DisplayName',
-        'AssociatedRules', 'RuleCount'
+    # Static-scope parameter set only. AdaptiveScopeLocation defines a separate parameter set and would
+    # cause "Multiple parameter sets are applicable" if mixed with the static locations.
+    $PolicyAllowedFields = @(
+        'Name', 'Comment', 'Enabled', 'RestrictiveRetention',
+        'ExchangeLocation', 'ExchangeLocationException',
+        'SharePointLocation', 'SharePointLocationException',
+        'OneDriveLocation', 'OneDriveLocationException',
+        'ModernGroupLocation', 'ModernGroupLocationException',
+        'TeamsChannelLocation', 'TeamsChannelLocationException',
+        'TeamsChatLocation', 'TeamsChatLocationException',
+        'PublicFolderLocation',
+        'SkypeLocation', 'SkypeLocationException'
+    )
+
+    $RequiredOneOfLocations = @(
+        'ExchangeLocation', 'SharePointLocation', 'OneDriveLocation', 'ModernGroupLocation',
+        'TeamsChannelLocation', 'TeamsChatLocation', 'PublicFolderLocation', 'SkypeLocation'
+    )
+
+    # Rules use a different cmdlet with its own param set
+    $RuleAllowedFields = @(
+        'Name', 'Policy', 'Comment',
+        'RetentionDuration', 'RetentionComplianceAction',
+        'ExpirationDateOption', 'PublishComplianceTag',
+        'ApplyComplianceTag', 'ContentMatchQuery',
+        'ContentDateFrom', 'ContentDateTo'
     )
 
     $LocationProperties = @(
@@ -68,35 +86,22 @@ function Invoke-CIPPStandardRetentionCompliancePolicyTemplate {
         return @($items)
     }
 
-    function ConvertTo-CleanParams {
-        param($Source)
+    function ConvertTo-CleanFromAllowlist {
+        param($Source, [string[]]$Allowed, [string[]]$Locations)
         $clean = @{}
         foreach ($prop in $Source.PSObject.Properties) {
-            if ($prop.Name -in $ReadOnlyProperties) { continue }
+            if ($prop.Name -notin $Allowed) { continue }
             $val = $prop.Value
             if ($null -eq $val) { continue }
             if ($val -is [string] -and [string]::IsNullOrWhiteSpace($val)) { continue }
             if (($val -is [array] -or $val -is [System.Collections.IList]) -and @($val).Count -eq 0) { continue }
-            if ($prop.Name -in $LocationProperties) {
+            if ($Locations -and $prop.Name -in $Locations) {
                 $normalized = ConvertTo-LocationValue -Value $val
                 if ($null -eq $normalized) { continue }
                 $clean[$prop.Name] = $normalized
             } else {
                 $clean[$prop.Name] = $val
             }
-        }
-        return $clean
-    }
-
-    function ConvertTo-CleanRuleParams {
-        param($Source)
-        $clean = @{}
-        foreach ($prop in $Source.PSObject.Properties) {
-            $val = $prop.Value
-            if ($null -eq $val) { continue }
-            if ($val -is [string] -and [string]::IsNullOrWhiteSpace($val)) { continue }
-            if (($val -is [array] -or $val -is [System.Collections.IList]) -and @($val).Count -eq 0) { continue }
-            $clean[$prop.Name] = $val
         }
         return $clean
     }
@@ -138,7 +143,39 @@ function Invoke-CIPPStandardRetentionCompliancePolicyTemplate {
         foreach ($Template in @($Templates)) {
             $TemplateName = $Template.Name ?? $Template.name
             try {
-                $PolicyParams = ConvertTo-CleanParams -Source $Template
+                $PolicyParams = ConvertTo-CleanFromAllowlist -Source $Template -Allowed $PolicyAllowedFields -Locations $LocationProperties
+
+                # Reconstruct empty locations from the Workload string when needed (legacy templates from Get-*)
+                $HasLocation = $false
+                foreach ($loc in $RequiredOneOfLocations) {
+                    if ($PolicyParams.ContainsKey($loc)) { $HasLocation = $true; break }
+                }
+                if (-not $HasLocation -and $Template.Workload) {
+                    $workloads = ($Template.Workload -split ',') | ForEach-Object { $_.Trim() }
+                    $map = @{
+                        'Exchange'            = 'ExchangeLocation'
+                        'SharePoint'          = 'SharePointLocation'
+                        'OneDriveForBusiness' = 'OneDriveLocation'
+                        'Skype'               = 'SkypeLocation'
+                        'ModernGroup'         = 'ModernGroupLocation'
+                        'PublicFolder'        = 'PublicFolderLocation'
+                    }
+                    foreach ($wl in $workloads) {
+                        if ($map.ContainsKey($wl) -and -not $PolicyParams.ContainsKey($map[$wl])) {
+                            $PolicyParams[$map[$wl]] = 'All'; $HasLocation = $true
+                        }
+                    }
+                    if ('Teams' -in $workloads) {
+                        if (-not $PolicyParams.ContainsKey('TeamsChatLocation')) { $PolicyParams['TeamsChatLocation'] = 'All'; $HasLocation = $true }
+                        if (-not $PolicyParams.ContainsKey('TeamsChannelLocation')) { $PolicyParams['TeamsChannelLocation'] = 'All'; $HasLocation = $true }
+                    }
+                }
+                # Last-ditch fallback for legacy templates that have neither locations nor a Workload string.
+                if (-not $HasLocation) {
+                    $PolicyParams['ExchangeLocation'] = 'All'
+                    Write-LogMessage -API 'Standards' -tenant $Tenant -message "Retention compliance policy template '$TemplateName' has no location info — defaulting to ExchangeLocation = 'All'. Edit the template to scope it more narrowly." -sev Warning
+                }
+
                 $PolicyExists = [bool]($ExistingPolicies | Where-Object { $_.Name -eq $TemplateName })
 
                 if ($PolicyExists) {
@@ -154,7 +191,7 @@ function Invoke-CIPPStandardRetentionCompliancePolicyTemplate {
 
                 $RuleSource = $Template.RuleParams
                 if ($RuleSource) {
-                    $RuleHash = ConvertTo-CleanRuleParams -Source $RuleSource
+                    $RuleHash = ConvertTo-CleanFromAllowlist -Source $RuleSource -Allowed $RuleAllowedFields
                     $RuleHash['Policy'] = $TemplateName
                     $RuleName = if ($RuleHash.ContainsKey('Name') -and -not [string]::IsNullOrWhiteSpace([string]$RuleHash['Name'])) {
                         $RuleHash['Name']
@@ -184,15 +221,28 @@ function Invoke-CIPPStandardRetentionCompliancePolicyTemplate {
         }
     }
 
-    if ($Settings.report -eq $true) {
-        $MissingPolicies = foreach ($Template in @($Templates)) {
-            $TemplateName = $Template.Name ?? $Template.name
-            if (-not ($ExistingPolicies | Where-Object { $_.Name -eq $TemplateName })) { $TemplateName }
-        }
+    # Compute missing list once for both alert and report
+    $MissingPolicies = foreach ($Template in @($Templates)) {
+        $TemplateName = $Template.Name ?? $Template.name
+        if (-not ($ExistingPolicies | Where-Object { $_.Name -eq $TemplateName })) { $TemplateName }
+    }
+    $MissingPolicies = @($MissingPolicies)
 
-        $CurrentValue = @{ MissingPolicies = $MissingPolicies ? @($MissingPolicies) : @() }
+    if ($Settings.alert -eq $true) {
+        if ($MissingPolicies.Count -eq 0) {
+            Write-LogMessage -API 'Standards' -tenant $Tenant -message 'All selected retention compliance policy templates are deployed.' -sev Info
+        } else {
+            $AlertMessage = "Retention compliance policies not deployed in tenant: $($MissingPolicies -join ', ')"
+            Write-StandardsAlert -message $AlertMessage -object @{ MissingPolicies = $MissingPolicies } -tenant $Tenant -standardName 'RetentionCompliancePolicyTemplate' -standardId $Settings.standardId
+            Write-LogMessage -API 'Standards' -tenant $Tenant -message $AlertMessage -sev Info
+        }
+    }
+
+    if ($Settings.report -eq $true) {
+        $CurrentValue = @{ MissingPolicies = $MissingPolicies }
         $ExpectedValue = @{ MissingPolicies = @() }
 
         Set-CIPPStandardsCompareField -FieldName 'standards.RetentionCompliancePolicyTemplate' -CurrentValue $CurrentValue -ExpectedValue $ExpectedValue -TenantFilter $Tenant
+        Add-CIPPBPAField -FieldName 'RetentionCompliancePolicyTemplate' -FieldValue ($MissingPolicies.Count -eq 0) -StoreAs bool -Tenant $Tenant
     }
 }

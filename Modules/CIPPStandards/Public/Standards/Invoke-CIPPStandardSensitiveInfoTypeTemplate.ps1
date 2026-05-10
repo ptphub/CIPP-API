@@ -15,7 +15,7 @@ function Invoke-CIPPStandardSensitiveInfoTypeTemplate {
         CAT
             Templates
         DISABLEDFEATURES
-            {"report":false,"warn":true,"remediate":false}
+            {"report":false,"warn":false,"remediate":false}
         IMPACT
             Low Impact
         ADDEDDATE
@@ -173,15 +173,27 @@ function Invoke-CIPPStandardSensitiveInfoTypeTemplate {
         }
     }
 
-    if ($Settings.report -eq $true) {
-        $MissingSits = foreach ($Template in @($Templates)) {
-            $TemplateName = $Template.Name ?? $Template.name
-            if (-not ($ExistingSits | Where-Object { $_.Name -eq $TemplateName })) { $TemplateName }
-        }
+    $MissingSits = foreach ($Template in @($Templates)) {
+        $TemplateName = $Template.Name ?? $Template.name
+        if (-not ($ExistingSits | Where-Object { $_.Name -eq $TemplateName })) { $TemplateName }
+    }
+    $MissingSits = @($MissingSits)
 
-        $CurrentValue = @{ MissingSensitiveInfoTypes = $MissingSits ? @($MissingSits) : @() }
+    if ($Settings.alert -eq $true) {
+        if ($MissingSits.Count -eq 0) {
+            Write-LogMessage -API 'Standards' -tenant $Tenant -message 'All selected Sensitive Information Type templates are deployed.' -sev Info
+        } else {
+            $AlertMessage = "Sensitive Information Types not deployed in tenant: $($MissingSits -join ', ')"
+            Write-StandardsAlert -message $AlertMessage -object @{ MissingSensitiveInfoTypes = $MissingSits } -tenant $Tenant -standardName 'SensitiveInfoTypeTemplate' -standardId $Settings.standardId
+            Write-LogMessage -API 'Standards' -tenant $Tenant -message $AlertMessage -sev Info
+        }
+    }
+
+    if ($Settings.report -eq $true) {
+        $CurrentValue = @{ MissingSensitiveInfoTypes = $MissingSits }
         $ExpectedValue = @{ MissingSensitiveInfoTypes = @() }
 
         Set-CIPPStandardsCompareField -FieldName 'standards.SensitiveInfoTypeTemplate' -CurrentValue $CurrentValue -ExpectedValue $ExpectedValue -TenantFilter $Tenant
+        Add-CIPPBPAField -FieldName 'SensitiveInfoTypeTemplate' -FieldValue ($MissingSits.Count -eq 0) -StoreAs bool -Tenant $Tenant
     }
 }

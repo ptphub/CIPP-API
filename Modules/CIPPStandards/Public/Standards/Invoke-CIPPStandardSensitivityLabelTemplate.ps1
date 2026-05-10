@@ -15,7 +15,7 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
         CAT
             Templates
         DISABLEDFEATURES
-            {"report":false,"warn":true,"remediate":false}
+            {"report":false,"warn":false,"remediate":false}
         IMPACT
             Medium Impact
         ADDEDDATE
@@ -31,32 +31,44 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
     #>
     param($Tenant, $Settings)
 
-    $ReadOnlyProperties = @(
-        'GUID', 'comments', 'PolicyParams',
-        'Identity', 'Guid', 'Id', 'ImmutableId', 'IsValid',
-        'WhenCreated', 'WhenChanged', 'WhenCreatedUTC', 'WhenChangedUTC',
-        'CreatedBy', 'ModifiedBy', 'LastModifiedBy', 'ObjectState',
-        'Type', 'PublishedInPolicies', 'Disabled'
+    $LabelAllowedFields = @(
+        'Name', 'DisplayName', 'Comment', 'Tooltip', 'ParentId',
+        'Disabled', 'ContentType', 'Priority',
+        'EncryptionEnabled', 'EncryptionProtectionType', 'EncryptionRightsDefinitions',
+        'EncryptionContentExpiredOnDateInDaysOrNever', 'EncryptionDoNotForward',
+        'EncryptionEncryptOnly', 'EncryptionOfflineAccessDays',
+        'EncryptionPromptUser', 'EncryptionAESKeySize',
+        'ContentMarkingHeaderEnabled', 'ContentMarkingHeaderText',
+        'ContentMarkingHeaderFontSize', 'ContentMarkingHeaderFontColor', 'ContentMarkingHeaderAlignment',
+        'ContentMarkingFooterEnabled', 'ContentMarkingFooterText',
+        'ContentMarkingFooterFontSize', 'ContentMarkingFooterFontColor', 'ContentMarkingFooterAlignment',
+        'ContentMarkingFooterMargin',
+        'ContentMarkingWatermarkEnabled', 'ContentMarkingWatermarkText',
+        'ContentMarkingWatermarkFontSize', 'ContentMarkingWatermarkFontColor', 'ContentMarkingWatermarkLayout',
+        'ApplyContentMarkingHeaderEnabled', 'ApplyContentMarkingFooterEnabled', 'ApplyWaterMarkingEnabled',
+        'SiteAndGroupProtectionEnabled', 'SiteAndGroupProtectionPrivacy',
+        'SiteAndGroupProtectionAllowAccessToGuestUsers',
+        'SiteAndGroupProtectionAllowEmailFromGuestUsers',
+        'SiteAndGroupProtectionAllowFullAccess',
+        'SiteAndGroupProtectionAllowLimitedAccess',
+        'SiteAndGroupProtectionBlockAccess',
+        'Conditions', 'AdvancedSettings', 'Settings', 'LocaleSettings'
     )
 
-    function ConvertTo-CleanParams {
-        param($Source)
-        $clean = @{}
-        foreach ($prop in $Source.PSObject.Properties) {
-            if ($prop.Name -in $ReadOnlyProperties) { continue }
-            $val = $prop.Value
-            if ($null -eq $val) { continue }
-            if ($val -is [string] -and [string]::IsNullOrWhiteSpace($val)) { continue }
-            if (($val -is [array] -or $val -is [System.Collections.IList]) -and @($val).Count -eq 0) { continue }
-            $clean[$prop.Name] = $val
-        }
-        return $clean
-    }
+    $PolicyAllowedFields = @(
+        'Name', 'Comment', 'Labels', 'AdvancedSettings', 'Settings',
+        'ExchangeLocation', 'ExchangeLocationException',
+        'SharePointLocation', 'SharePointLocationException',
+        'OneDriveLocation', 'OneDriveLocationException',
+        'ModernGroupLocation', 'ModernGroupLocationException',
+        'PolicyTemplateInfo'
+    )
 
-    function ConvertTo-CleanPolicyParams {
-        param($Source)
+    function ConvertTo-CleanFromAllowlist {
+        param($Source, [string[]]$Allowed)
         $clean = @{}
         foreach ($prop in $Source.PSObject.Properties) {
+            if ($prop.Name -notin $Allowed) { continue }
             $val = $prop.Value
             if ($null -eq $val) { continue }
             if ($val -is [string] -and [string]::IsNullOrWhiteSpace($val)) { continue }
@@ -103,7 +115,7 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
         foreach ($Template in @($Templates)) {
             $TemplateName = $Template.Name ?? $Template.name
             try {
-                $LabelParams = ConvertTo-CleanParams -Source $Template
+                $LabelParams = ConvertTo-CleanFromAllowlist -Source $Template -Allowed $LabelAllowedFields
                 $LabelExists = [bool]($ExistingLabels | Where-Object { $_.Name -eq $TemplateName -or $_.DisplayName -eq $TemplateName })
 
                 if ($LabelExists) {
@@ -119,7 +131,7 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
 
                 $PolicySource = $Template.PolicyParams
                 if ($PolicySource) {
-                    $PolicyHash = ConvertTo-CleanPolicyParams -Source $PolicySource
+                    $PolicyHash = ConvertTo-CleanFromAllowlist -Source $PolicySource -Allowed $PolicyAllowedFields
                     if (-not $PolicyHash.ContainsKey('Labels') -or -not $PolicyHash['Labels']) {
                         $PolicyHash['Labels'] = @($TemplateName)
                     }
@@ -150,15 +162,27 @@ function Invoke-CIPPStandardSensitivityLabelTemplate {
         }
     }
 
-    if ($Settings.report -eq $true) {
-        $MissingLabels = foreach ($Template in @($Templates)) {
-            $TemplateName = $Template.Name ?? $Template.name
-            if (-not ($ExistingLabels | Where-Object { $_.Name -eq $TemplateName -or $_.DisplayName -eq $TemplateName })) { $TemplateName }
-        }
+    $MissingLabels = foreach ($Template in @($Templates)) {
+        $TemplateName = $Template.Name ?? $Template.name
+        if (-not ($ExistingLabels | Where-Object { $_.Name -eq $TemplateName -or $_.DisplayName -eq $TemplateName })) { $TemplateName }
+    }
+    $MissingLabels = @($MissingLabels)
 
-        $CurrentValue = @{ MissingLabels = $MissingLabels ? @($MissingLabels) : @() }
+    if ($Settings.alert -eq $true) {
+        if ($MissingLabels.Count -eq 0) {
+            Write-LogMessage -API 'Standards' -tenant $Tenant -message 'All selected sensitivity label templates are deployed.' -sev Info
+        } else {
+            $AlertMessage = "Sensitivity labels not deployed in tenant: $($MissingLabels -join ', ')"
+            Write-StandardsAlert -message $AlertMessage -object @{ MissingLabels = $MissingLabels } -tenant $Tenant -standardName 'SensitivityLabelTemplate' -standardId $Settings.standardId
+            Write-LogMessage -API 'Standards' -tenant $Tenant -message $AlertMessage -sev Info
+        }
+    }
+
+    if ($Settings.report -eq $true) {
+        $CurrentValue = @{ MissingLabels = $MissingLabels }
         $ExpectedValue = @{ MissingLabels = @() }
 
         Set-CIPPStandardsCompareField -FieldName 'standards.SensitivityLabelTemplate' -CurrentValue $CurrentValue -ExpectedValue $ExpectedValue -TenantFilter $Tenant
+        Add-CIPPBPAField -FieldName 'SensitivityLabelTemplate' -FieldValue ($MissingLabels.Count -eq 0) -StoreAs bool -Tenant $Tenant
     }
 }
