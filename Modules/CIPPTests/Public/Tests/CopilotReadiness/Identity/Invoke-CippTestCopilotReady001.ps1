@@ -13,20 +13,17 @@ function Invoke-CippTestCopilotReady001 {
     $PrerequisiteServicePlans = @('TEAMS1', 'MCOSTANDARD')
 
     try {
-        $LicenseData = New-CIPPDbRequest -TenantFilter $Tenant -Type 'LicenseOverview'
+        $LicenseData = Get-CIPPTestData -TenantFilter $Tenant -Type 'LicenseOverview'
 
         if (-not $LicenseData) {
             Add-CippTestResult -TenantFilter $Tenant -TestId 'CopilotReady001' -TestType 'Identity' -Status 'Skipped' -ResultMarkdown 'No license data found in database. Data collection may not yet have run for this tenant.' -Risk 'High' -Name 'Tenant has M365 Copilot prerequisite licenses' -UserImpact 'High' -ImplementationEffort 'Medium' -Category 'Copilot Readiness'
             return
         }
 
-        # LicenseOverview is stored as a single item; unwrap if needed
-        $Skus = if ($LicenseData.Licenses) { $LicenseData.Licenses } else { $LicenseData }
-
         $EligibleSkus = [System.Collections.Generic.List[object]]::new()
         $AssignableCount = 0
 
-        foreach ($Sku in $Skus) {
+        foreach ($Sku in $LicenseData) {
             $HasQualifyingPlan = $Sku.ServicePlans | Where-Object { $_.servicePlanName -in $PrerequisiteServicePlans }
             if ($HasQualifyingPlan -and [int]$Sku.TotalLicenses -gt 0) {
                 $EligibleSkus.Add($Sku) | Out-Null

@@ -77,7 +77,7 @@ function Invoke-EditJITAdminTemplate {
                         Write-LogMessage -headers $Headers -API $APIName -message "Unset default flag for existing template: $($data.templateName)" -Sev 'Info'
                     }
                 } catch {
-                    Write-LogMessage -headers $Headers -API $APIName -message "Failed to update existing template: $($_.Exception.Message)" -sev 'Warn'
+                    Write-LogMessage -headers $Headers -API $APIName -message "Failed to update existing template: $($_.Exception.Message)" -sev 'Warning'
                 }
             }
         }
@@ -94,6 +94,9 @@ function Invoke-EditJITAdminTemplate {
             templateName                = $TemplateName
             defaultForTenant            = $DefaultForTenant
             defaultRoles                = $Request.Body.defaultRoles
+            defaultGroups               = $Request.Body.defaultGroups
+            defaultUseRoles             = [bool]$Request.Body.defaultUseRoles
+            defaultUseGroups            = [bool]$Request.Body.defaultUseGroups
             defaultDuration             = $Request.Body.defaultDuration
             defaultExpireAction         = $Request.Body.defaultExpireAction
             defaultNotificationActions  = $Request.Body.defaultNotificationActions
@@ -110,6 +113,11 @@ function Invoke-EditJITAdminTemplate {
             $TemplateObject.defaultUserAction = $DefaultUserAction
         }
 
+        # Add existing user selection when "select" action is specified
+        if ($DefaultUserAction -eq 'select' -and $Request.Body.defaultExistingUser) {
+            $TemplateObject.defaultExistingUser = $Request.Body.defaultExistingUser
+        }
+
         # Add user detail fields when "create" action is specified
         if ($DefaultUserAction -eq 'create') {
             # These fields can be saved for both AllTenants and specific tenant templates
@@ -121,6 +129,9 @@ function Invoke-EditJITAdminTemplate {
             }
             if (![string]::IsNullOrWhiteSpace($Request.Body.defaultUserName)) {
                 $TemplateObject.defaultUserName = $Request.Body.defaultUserName
+            }
+            if ($Request.Body.defaultUsageLocation) {
+                $TemplateObject.defaultUsageLocation = $Request.Body.defaultUsageLocation.value ?? $Request.Body.defaultUsageLocation
             }
 
             # defaultDomain is only saved for specific tenant templates (not AllTenants)

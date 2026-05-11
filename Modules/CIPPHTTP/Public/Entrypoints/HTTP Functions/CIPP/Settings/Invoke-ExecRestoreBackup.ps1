@@ -14,7 +14,7 @@ function Invoke-ExecRestoreBackup {
     $AzureTableTypes = @(
         [string], [int], [long], [double], [bool], [datetime], [guid], [byte[]]
     )
-    $RestrictedTables = @('AccessRoleGroups', 'CustomRoles') # tables that require superadmin to restore
+    $RestrictedTables = @('AccessRoleGroups', 'AccessIPRanges', 'CustomRoles') # tables that require superadmin to restore
 
     # Resolve the calling user's roles, including Entra group-based roles
     $CallingUser = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($Request.Headers.'x-ms-client-principal')) | ConvertFrom-Json
@@ -59,6 +59,9 @@ function Invoke-ExecRestoreBackup {
                     if ($_.table -like 'cache*') {
                         return
                     }
+                    if ($_.table -eq 'Config' -and $_.PartitionKey -eq 'OffloadFunctions') {
+                        return
+                    }
                     if ($RestrictedTables -contains $_.table -and -not $IsSuperAdmin) {
                         Write-Information "Skipping restricted table '$($_.table)' - user does not have superadmin rights"
                         return
@@ -86,6 +89,9 @@ function Invoke-ExecRestoreBackup {
             $RestoredCount = 0
             foreach ($line in ($Request.body | Select-Object * -ExcludeProperty ETag, Timestamp)) {
                 if ($line.table -like 'cache*') {
+                    continue
+                }
+                if ($line.table -eq 'Config' -and $line.PartitionKey -eq 'OffloadFunctions') {
                     continue
                 }
                 if ($RestrictedTables -contains $line.table -and -not $IsSuperAdmin) {
