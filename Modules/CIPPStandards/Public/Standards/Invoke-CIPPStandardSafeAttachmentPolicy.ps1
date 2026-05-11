@@ -53,7 +53,7 @@ function Invoke-CIPPStandardSafeAttachmentPolicy {
         return $true
     } #we're done.
 
-    $MDOTestResult = Test-CIPPStandardLicense -StandardName 'SafeAttachmentPolicy' -TenantFilter $Tenant -RequiredCapabilities @('ATP_ENTERPRISE', 'ATP_ENTERPRISE_GOV', 'THREAT_INTELLIGENCE')
+    $MDOTestResult = Test-CIPPStandardLicense -StandardName 'SafeAttachmentPolicy' -TenantFilter $Tenant -Preset DefenderForOffice365
 
     if ($MDOTestResult -eq $false) {
         return $true
@@ -113,8 +113,8 @@ function Invoke-CIPPStandardSafeAttachmentPolicy {
     $AcceptedDomains = New-ExoRequest -tenantid $Tenant -cmdlet 'Get-AcceptedDomain'
 
     $RuleState = $AllSafeAttachmentRule |
-    Where-Object -Property Name -EQ $RuleName |
-    Select-Object Name, SafeAttachmentPolicy, Priority, RecipientDomainIs
+        Where-Object -Property Name -EQ $RuleName |
+        Select-Object Name, SafeAttachmentPolicy, Priority, RecipientDomainIs
 
     $RuleStateIsCorrect = ($RuleState.Name -eq $RuleName) -and
     ($RuleState.SafeAttachmentPolicy -eq $PolicyName) -and

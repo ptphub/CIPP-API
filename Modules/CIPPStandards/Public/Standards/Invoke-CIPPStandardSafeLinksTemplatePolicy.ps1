@@ -45,7 +45,7 @@ function Invoke-CIPPStandardSafeLinksTemplatePolicy {
 
     Write-LogMessage -API 'Standards' -tenant $Tenant -message "Processing SafeLinks template with settings: $($Settings | ConvertTo-Json -Compress)" -sev Debug
 
-    $MDOTestResult = Test-CIPPStandardLicense -StandardName 'SafeLinksTemplatePolicy' -TenantFilter $Tenant -RequiredCapabilities @('ATP_ENTERPRISE', 'ATP_ENTERPRISE_GOV', 'THREAT_INTELLIGENCE')
+    $MDOTestResult = Test-CIPPStandardLicense -StandardName 'SafeLinksTemplatePolicy' -TenantFilter $Tenant -Preset DefenderForOffice365
     if ($MDOTestResult -eq $false) {
         return
     } #tenant lacks Microsoft Defender for Office 365 — Test-CIPPStandardLicense logs and sets LicenseAvailable=false.

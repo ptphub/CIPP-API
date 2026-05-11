@@ -67,7 +67,7 @@ function Invoke-CIPPStandardSafeLinksPolicy {
         return $true
     } #we're done.
 
-    $MDOTestResult = Test-CIPPStandardLicense -StandardName 'SafeLinksPolicy' -TenantFilter $Tenant -RequiredCapabilities @('ATP_ENTERPRISE', 'ATP_ENTERPRISE_GOV', 'THREAT_INTELLIGENCE')
+    $MDOTestResult = Test-CIPPStandardLicense -StandardName 'SafeLinksPolicy' -TenantFilter $Tenant -Preset DefenderForOffice365
 
     if ($MDOTestResult -eq $false) {
         return $true

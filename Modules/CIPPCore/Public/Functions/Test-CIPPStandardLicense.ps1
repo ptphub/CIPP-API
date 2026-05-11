@@ -34,7 +34,7 @@ function Test-CIPPStandardLicense {
         [string[]]$RequiredCapabilities,
 
         [Parameter(Mandatory = $false)]
-        [ValidateSet('Exchange', 'SharePoint', 'Intune', 'Entra', 'EntraP2', 'Teams', 'Compliance')]
+        [ValidateSet('Exchange', 'SharePoint', 'Intune', 'Entra', 'EntraP2', 'Teams', 'Compliance', 'DefenderForOffice365')]
         [string[]]$Preset,
 
         [Parameter(Mandatory = $false)]
@@ -42,17 +42,21 @@ function Test-CIPPStandardLicense {
     )
 
     $Presets = @{
-        Exchange   = @('EXCHANGE_S_STANDARD', 'EXCHANGE_S_ENTERPRISE',
+        Exchange             = @('EXCHANGE_S_STANDARD', 'EXCHANGE_S_ENTERPRISE',
             'EXCHANGE_S_STANDARD_GOV', 'EXCHANGE_S_ENTERPRISE_GOV',
             'EXCHANGE_LITE')
-        SharePoint = @('SHAREPOINTWAC', 'SHAREPOINTSTANDARD', 'SHAREPOINTENTERPRISE',
+        SharePoint           = @('SHAREPOINTWAC', 'SHAREPOINTSTANDARD', 'SHAREPOINTENTERPRISE',
             'SHAREPOINTENTERPRISE_EDU', 'SHAREPOINTENTERPRISE_GOV',
             'ONEDRIVE_BASIC', 'ONEDRIVE_ENTERPRISE')
-        Intune     = @('INTUNE_A', 'MDM_Services', 'EMS', 'SCCM', 'MICROSOFTINTUNEPLAN1')
-        Entra      = @('AAD_PREMIUM', 'AAD_PREMIUM_P2')
-        EntraP2    = @('AAD_PREMIUM_P2')
-        Teams      = @('MCOSTANDARD', 'MCOEV', 'MCOIMP', 'TEAMS1', 'Teams_Room_Standard')
-        Compliance = @('RMS_S_PREMIUM', 'RMS_S_PREMIUM2', 'MIP_S_CLP1', 'MIP_S_CLP2')
+        Intune               = @('INTUNE_A', 'MDM_Services', 'EMS', 'SCCM', 'MICROSOFTINTUNEPLAN1')
+        Entra                = @('AAD_PREMIUM', 'AAD_PREMIUM_P2')
+        EntraP2              = @('AAD_PREMIUM_P2')
+        Teams                = @('MCOSTANDARD', 'MCOEV', 'MCOIMP', 'TEAMS1', 'Teams_Room_Standard')
+        Compliance           = @('RMS_S_PREMIUM', 'RMS_S_PREMIUM2', 'MIP_S_CLP1', 'MIP_S_CLP2')
+        DefenderForOffice365 = @(
+            'ATP_ENTERPRISE', 'ATP_ENTERPRISE_GOV',
+            'THREAT_INTELLIGENCE', 'THREAT_INTELLIGENCE_GOV'
+        )
     }
 
     if ((!$Preset -or $Preset.Count -eq 0) -and (!$RequiredCapabilities -or $RequiredCapabilities.Count -eq 0)) {

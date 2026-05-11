@@ -47,7 +47,7 @@ function Invoke-CIPPStandardAtpPolicyForO365 {
         return $true
     } #we're done.
 
-    $MDOTestResult = Test-CIPPStandardLicense -StandardName 'AtpPolicyForO365' -TenantFilter $Tenant -RequiredCapabilities @('ATP_ENTERPRISE', 'ATP_ENTERPRISE_GOV', 'THREAT_INTELLIGENCE')
+    $MDOTestResult = Test-CIPPStandardLicense -StandardName 'AtpPolicyForO365' -TenantFilter $Tenant -Preset DefenderForOffice365
 
     if ($MDOTestResult -eq $false) {
         return $true
