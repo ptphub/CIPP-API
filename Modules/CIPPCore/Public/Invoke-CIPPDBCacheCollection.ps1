@@ -93,8 +93,6 @@ function Invoke-CIPPDBCacheCollection {
         ExchangeData       = @(
             'CASMailboxes'
             'MailboxUsage'
-            'OneDriveUsage'
-            'SharePointSiteUsage'
             'OfficeActivations'
             'HVEAccounts'
         )
@@ -138,7 +136,8 @@ function Invoke-CIPPDBCacheCollection {
         SharePoint         = @(
             'SPOTenant'
             'SPOTenantSyncClientRestriction'
-            'Sites'
+            'SharePointSiteUsage'
+            'OneDriveUsage'
         )
         Teams              = @(
             'CsTeamsMeetingPolicy'
