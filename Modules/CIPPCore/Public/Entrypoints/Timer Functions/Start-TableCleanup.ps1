@@ -21,7 +21,7 @@ function Start-TableCleanup {
             Type           = 'CleanupRule'
             TableName      = 'CippReportingDB'
             DataTableProps = @{
-                Filter   = "PartitionKey eq 'Search' and Timestamp lt datetime'$((Get-Date).AddHours(-30).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))'"
+                Filter   = "PartitionKey eq 'Search' and Timestamp lt datetime'$((Get-Date).AddDays(-30).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))'"
                 First    = 10000
                 Property = @('PartitionKey', 'RowKey', 'ETag')
             }
