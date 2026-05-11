@@ -96,6 +96,7 @@ function Invoke-CIPPDBCacheCollection {
             'OneDriveUsage'
             'SharePointSiteUsage'
             'OfficeActivations'
+            'HVEAccounts'
         )
         ConditionalAccess  = @(
             'ConditionalAccessPolicies'
