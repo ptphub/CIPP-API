@@ -64,14 +64,6 @@ function Invoke-AddCustomScript {
                     }
                     $NewResultMode = $RequestedMode
                 }
-                'SetResultMode' {
-                    $RequestedMode = $Request.Body.ResultMode
-                    $ValidResultModes = @('Auto', 'AlwaysPass', 'AlwaysInfo')
-                    if ([string]::IsNullOrWhiteSpace($RequestedMode) -or $RequestedMode -notin $ValidResultModes) {
-                        throw "ResultMode must be one of: $($ValidResultModes -join ', ')"
-                    }
-                    $NewResultMode = $RequestedMode
-                }
             }
 
             $MergeEntity = @{
