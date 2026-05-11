@@ -106,9 +106,8 @@ function Invoke-AddOfficeApp {
                 continue
             }
             Write-LogMessage -headers $Headers -API $APIName -tenant $($Tenant) -message "Added Office profile to $($Tenant)" -Sev 'Info'
-            if ($AssignTo) {
-                $AssignO365 = if ($AssignTo -ne 'AllDevicesAndUsers') { '{"mobileAppAssignments":[{"@odata.type":"#microsoft.graph.mobileAppAssignment","target":{"@odata.type":"#microsoft.graph.' + $($AssignTo) + 'AssignmentTarget"},"intent":"Required"}]}' } else { '{"mobileAppAssignments":[{"@odata.type":"#microsoft.graph.mobileAppAssignment","target":{"@odata.type":"#microsoft.graph.allDevicesAssignmentTarget"},"intent":"Required"},{"@odata.type":"#microsoft.graph.mobileAppAssignment","target":{"@odata.type":"#microsoft.graph.allLicensedUsersAssignmentTarget"},"intent":"Required"}]}' }           Write-Host ($AssignO365)
-                New-GraphPOSTRequest -Uri "https://graph.microsoft.com/beta/deviceAppManagement/mobileApps/$($OfficeAppID.id)/assign" -tenantid $Tenant -Body $AssignO365 -type POST
+            if ($AssignTo -and $AssignTo -ne 'On') {
+                Set-CIPPAssignedApplication -ApplicationId $OfficeAppID.id -TenantFilter $Tenant -Intent 'Required' -GroupName $AssignTo -APIName $APIName -Headers $Headers
                 Write-LogMessage -headers $Headers -API $APIName -tenant $($Tenant) -message "Assigned Office to $AssignTo" -Sev 'Info'
             }
             "Successfully added Office App for $($Tenant)"
