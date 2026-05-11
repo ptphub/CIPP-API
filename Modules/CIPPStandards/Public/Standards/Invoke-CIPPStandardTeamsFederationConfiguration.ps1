@@ -18,7 +18,7 @@ function Invoke-CIPPStandardTeamsFederationConfiguration {
         ADDEDCOMPONENT
             {"type":"switch","name":"standards.TeamsFederationConfiguration.AllowTeamsConsumer","label":"Allow users to communicate with other organizations"}
             {"type":"autoComplete","required":true,"multiple":false,"creatable":false,"name":"standards.TeamsFederationConfiguration.DomainControl","label":"Communication Mode","options":[{"label":"Allow all external domains","value":"AllowAllExternal"},{"label":"Block all external domains","value":"BlockAllExternal"},{"label":"Allow specific external domains","value":"AllowSpecificExternal"},{"label":"Block specific external domains","value":"BlockSpecificExternal"}]}
-            {"type":"textField","name":"standards.TeamsFederationConfiguration.DomainList","label":"Domains, Comma separated","required":false}
+            {"type":"textField","name":"standards.TeamsFederationConfiguration.DomainList","label":"Domains, Comma separated","required":false,"condition":{"field":"standards.TeamsFederationConfiguration.DomainControl.value","compareType":"isOneOf","compareValue":["AllowSpecificExternal","BlockSpecificExternal"]}}
         IMPACT
             Medium Impact
         ADDEDDATE
@@ -26,6 +26,12 @@ function Invoke-CIPPStandardTeamsFederationConfiguration {
         POWERSHELLEQUIVALENT
             Set-CsTenantFederationConfiguration
         RECOMMENDEDBY
+        REQUIREDCAPABILITIES
+            "MCOSTANDARD"
+            "MCOEV"
+            "MCOIMP"
+            "TEAMS1"
+            "Teams_Room_Standard"
         UPDATECOMMENTBLOCK
             Run the Tools\Update-StandardsComments.ps1 script to update this comment block
     .LINK
@@ -69,7 +75,7 @@ function Invoke-CIPPStandardTeamsFederationConfiguration {
             $AllowedDomains = $null
             $BlockedDomains = @()
             if ($null -ne $Settings.DomainList) {
-                $AllowedDomainsAsAList = @($Settings.DomainList).Split(',').Trim()
+                $AllowedDomainsAsAList = @($Settings.DomainList).Split(',').Trim() | Sort-Object
             } else {
                 $AllowedDomainsAsAList = @()
             }
@@ -79,7 +85,7 @@ function Invoke-CIPPStandardTeamsFederationConfiguration {
             $AllowedDomains = $AllowAllKnownDomains
             $AllowedDomainsAsAList = @()
             if ($null -ne $Settings.DomainList) {
-                $BlockedDomains = @($Settings.DomainList).Split(',').Trim()
+                $BlockedDomains = @($Settings.DomainList).Split(',').Trim() | Sort-Object
             } else {
                 $BlockedDomains = @()
             }

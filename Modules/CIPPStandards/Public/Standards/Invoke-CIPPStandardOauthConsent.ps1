@@ -19,6 +19,14 @@ function Invoke-CIPPStandardOauthConsent {
             "EIDSCA.AP09"
             "Essential 8 (1175)"
             "NIST CSF 2.0 (PR.AA-05)"
+            "ZTNA21772"
+            "ZTNA21774"
+            "ZTNA21807"
+            "EIDSCAAP08"
+            "EIDSCAAP09"
+            "EIDSCACP01"
+            "EIDSCACP03"
+            "EIDSCACP04"
         EXECUTIVETEXT
             Requires administrative approval before employees can grant applications access to company data, preventing unauthorized data sharing and potential security breaches. This protects against malicious applications while allowing approved business tools to function normally.
         ADDEDCOMPONENT
@@ -73,6 +81,16 @@ function Invoke-CIPPStandardOauthConsent {
 
             try {
                 $ExistingIncludesEntries = @($CompareIncludes)
+
+                # Ensure the default M365 management app delegated include exists
+                $DefaultAppId = '00b41c95-dab0-4487-9791-b9d2c32c80f2'
+                $HasDefaultDelegated = $ExistingIncludesEntries | Where-Object {
+                    $_.permissionType -eq 'delegated' -and $_.clientApplicationIds -contains $DefaultAppId
+                }
+                if (-not $HasDefaultDelegated) {
+                    New-GraphPostRequest -tenantid $tenant -Uri 'https://graph.microsoft.com/beta/policies/permissionGrantPolicies/cipp-consent-policy/includes' -Type POST -Body ('{"permissionClassification":"all","permissionType":"delegated","clientApplicationIds":["' + $DefaultAppId + '"]}') -ContentType 'application/json'
+                    $DidRemediationChange = $true
+                }
 
                 foreach ($AllowedApp in $AllowedAppIdsForTenant) {
                     $HasDelegated = $ExistingIncludesEntries | Where-Object {

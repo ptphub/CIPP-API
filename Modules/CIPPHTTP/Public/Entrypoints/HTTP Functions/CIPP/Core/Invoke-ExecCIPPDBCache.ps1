@@ -13,6 +13,11 @@ function Invoke-ExecCIPPDBCache {
     $Name = $Request.Query.Name
     $Types = $Request.Query.Types
 
+    $ParsedTypes = @()
+    if (-not [string]::IsNullOrWhiteSpace($Types)) {
+        $ParsedTypes = @($Types -split ',' | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -ne 'None' })
+    }
+
     Write-Information "ExecCIPPDBCache called with Name: '$Name', TenantFilter: '$TenantFilter', Types: '$Types'"
 
     try {
@@ -24,11 +29,25 @@ function Invoke-ExecCIPPDBCache {
             throw 'TenantFilter parameter is required'
         }
 
-        # Validate the function exists
+        # Validate the function exists — on HttpOnly workers CIPPDB module isn't loaded,
+        # so import it temporarily for validation (the actual execution runs on activity workers)
         $FunctionName = "Set-CIPPDBCache$Name"
         $Function = Get-Command -Name $FunctionName -ErrorAction SilentlyContinue
+        $ImportedCIPPDB = $false
         if (-not $Function) {
-            throw "Cache function '$FunctionName' not found"
+            try {
+                if (-not (Get-Module -Name 'CIPPDB')) {
+                    Import-Module CIPPDB -ErrorAction Stop
+                    $ImportedCIPPDB = $true
+                }
+                $Function = Get-Command -Name $FunctionName -ErrorAction Stop
+            } catch {
+                throw "Cache function '$FunctionName' not found"
+            } finally {
+                if ($ImportedCIPPDB) {
+                    Remove-Module CIPPDB -ErrorAction SilentlyContinue
+                }
+            }
         }
 
         # Create queue entry for tracking
@@ -52,8 +71,8 @@ function Invoke-ExecCIPPDBCache {
                     QueueId      = $Queue.RowKey
                 }
                 # Add Types parameter if provided
-                if ($Types) {
-                    $BatchItem | Add-Member -NotePropertyName 'Types' -NotePropertyValue @($Types -split ',') -Force
+                if ($ParsedTypes.Count -gt 0) {
+                    $BatchItem | Add-Member -NotePropertyName 'Types' -NotePropertyValue $ParsedTypes -Force
                 }
                 $BatchItem
             }
@@ -77,8 +96,8 @@ function Invoke-ExecCIPPDBCache {
                 QueueId      = $Queue.RowKey
             }
             # Add Types parameter if provided
-            if ($Types) {
-                $BatchItem | Add-Member -NotePropertyName 'Types' -NotePropertyValue @($Types -split ',') -Force
+            if ($ParsedTypes.Count -gt 0) {
+                $BatchItem | Add-Member -NotePropertyName 'Types' -NotePropertyValue $ParsedTypes -Force
             }
 
             $InputObject = [PSCustomObject]@{

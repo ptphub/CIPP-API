@@ -24,6 +24,12 @@ function Invoke-CIPPStandardDelegateSentItems {
         POWERSHELLEQUIVALENT
             Set-Mailbox
         RECOMMENDEDBY
+        REQUIREDCAPABILITIES
+            "EXCHANGE_S_STANDARD"
+            "EXCHANGE_S_ENTERPRISE"
+            "EXCHANGE_S_STANDARD_GOV"
+            "EXCHANGE_S_ENTERPRISE_GOV"
+            "EXCHANGE_LITE"
         UPDATECOMMENTBLOCK
             Run the Tools\Update-StandardsComments.ps1 script to update this comment block
     .LINK
@@ -45,7 +51,7 @@ function Invoke-CIPPStandardDelegateSentItems {
     }
     $Mailboxes = New-CippDbRequest -TenantFilter $Tenant -Type 'Mailboxes'
     if ($Settings.IncludeUserMailboxes -eq $true) {
-        $Mailboxes = $Mailboxes | Where-Object { $_.recipientTypeDetails -ne 'DiscoveryMailbox' -and  ($_.MessageCopyForSendOnBehalfEnabled -eq $false -or $_.MessageCopyForSentAsEnabled -eq $false) }
+        $Mailboxes = $Mailboxes | Where-Object { $_.recipientTypeDetails -in @('UserMailbox', 'SharedMailbox') -and ($_.MessageCopyForSendOnBehalfEnabled -eq $false -or $_.MessageCopyForSentAsEnabled -eq $false) }
     } else {
         $Mailboxes = $Mailboxes | Where-Object { $_.recipientTypeDetails -eq 'SharedMailbox' -and ($_.MessageCopyForSendOnBehalfEnabled -eq $false -or $_.MessageCopyForSentAsEnabled -eq $false) }
     }
@@ -73,8 +79,8 @@ function Invoke-CIPPStandardDelegateSentItems {
                 $BatchResults = New-ExoBulkRequest -tenantid $Tenant -cmdletArray @($Request)
                 foreach ($Result in $BatchResults) {
                     if ($Result.error) {
-                        $ErrorMessage = Get-CippException -Exception $Result.error
-                        Write-LogMessage -API 'Standards' -tenant $Tenant -message "Failed to apply Delegate Sent Items Style to $($Result.error.target) Error: $($ErrorMessage.NormalizedError)" -sev Error -LogData $ErrorMessage
+                        $ErrorMessage = Get-NormalizedError -Message $Result.error
+                        Write-LogMessage -API 'Standards' -tenant $Tenant -message "Failed to apply Delegate Sent Items Style to $($Result.target) Error: $ErrorMessage" -sev Error
                     }
                 }
                 Write-LogMessage -API 'Standards' -tenant $Tenant -message "Delegate Sent Items Style applied for $($Mailboxes.Count - $BatchResults.Error.Count) mailboxes" -sev Info

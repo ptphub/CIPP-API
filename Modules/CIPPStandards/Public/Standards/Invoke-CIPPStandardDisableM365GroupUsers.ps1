@@ -14,6 +14,7 @@ function Invoke-CIPPStandardDisableM365GroupUsers {
             Entra (AAD) Standards
         TAG
             "CISA (MS.AAD.21.1v1)"
+            "ZTNA21868"
         EXECUTIVETEXT
             Restricts the creation of Microsoft 365 groups, Teams, and SharePoint sites to authorized administrators, preventing uncontrolled proliferation of collaboration spaces. This ensures proper governance, naming conventions, and resource management while maintaining oversight of all collaborative environments.
         ADDEDCOMPONENT
@@ -24,6 +25,14 @@ function Invoke-CIPPStandardDisableM365GroupUsers {
         POWERSHELLEQUIVALENT
             Update-MgBetaDirectorySetting
         RECOMMENDEDBY
+        REQUIREDCAPABILITIES
+            "SHAREPOINTWAC"
+            "SHAREPOINTSTANDARD"
+            "SHAREPOINTENTERPRISE"
+            "SHAREPOINTENTERPRISE_EDU"
+            "SHAREPOINTENTERPRISE_GOV"
+            "ONEDRIVE_BASIC"
+            "ONEDRIVE_ENTERPRISE"
         UPDATECOMMENTBLOCK
             Run the Tools\Update-StandardsComments.ps1 script to update this comment block
     .LINK
@@ -31,7 +40,7 @@ function Invoke-CIPPStandardDisableM365GroupUsers {
     #>
 
     param($Tenant, $Settings)
-    $TestResult = Test-CIPPStandardLicense -StandardName 'DisableM365GroupUsers' -TenantFilter $Tenant -RequiredCapabilities @('SHAREPOINTWAC', 'SHAREPOINTSTANDARD', 'SHAREPOINTENTERPRISE', 'SHAREPOINTENTERPRISE_EDU', 'ONEDRIVE_BASIC', 'ONEDRIVE_ENTERPRISE')
+    $TestResult = Test-CIPPStandardLicense -StandardName 'DisableM365GroupUsers' -TenantFilter $Tenant -RequiredCapabilities @('SHAREPOINTWAC', 'SHAREPOINTSTANDARD', 'SHAREPOINTENTERPRISE', 'SHAREPOINTENTERPRISE_EDU', 'SHAREPOINTENTERPRISE_GOV', 'ONEDRIVE_BASIC', 'ONEDRIVE_ENTERPRISE')
 
     if ($TestResult -eq $false) {
         return $true

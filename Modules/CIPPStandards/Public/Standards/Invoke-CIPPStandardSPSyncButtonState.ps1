@@ -24,6 +24,14 @@ function Invoke-CIPPStandardSPSyncButtonState {
         POWERSHELLEQUIVALENT
             Set-SPOTenant -HideSyncButtonOnTeamSite \$true or \$false
         RECOMMENDEDBY
+        REQUIREDCAPABILITIES
+            "SHAREPOINTWAC"
+            "SHAREPOINTSTANDARD"
+            "SHAREPOINTENTERPRISE"
+            "SHAREPOINTENTERPRISE_EDU"
+            "SHAREPOINTENTERPRISE_GOV"
+            "ONEDRIVE_BASIC"
+            "ONEDRIVE_ENTERPRISE"
         UPDATECOMMENTBLOCK
             Run the Tools\Update-StandardsComments.ps1 script to update this comment block
     .LINK
@@ -31,7 +39,7 @@ function Invoke-CIPPStandardSPSyncButtonState {
     #>
 
     param($Tenant, $Settings)
-    $TestResult = Test-CIPPStandardLicense -StandardName 'SPSyncButtonState' -TenantFilter $Tenant -RequiredCapabilities @('SHAREPOINTWAC', 'SHAREPOINTSTANDARD', 'SHAREPOINTENTERPRISE', 'SHAREPOINTENTERPRISE_EDU', 'ONEDRIVE_BASIC', 'ONEDRIVE_ENTERPRISE')
+    $TestResult = Test-CIPPStandardLicense -StandardName 'SPSyncButtonState' -TenantFilter $Tenant -RequiredCapabilities @('SHAREPOINTWAC', 'SHAREPOINTSTANDARD', 'SHAREPOINTENTERPRISE', 'SHAREPOINTENTERPRISE_EDU', 'SHAREPOINTENTERPRISE_GOV', 'ONEDRIVE_BASIC', 'ONEDRIVE_ENTERPRISE')
 
     if ($TestResult -eq $false) {
         return $true

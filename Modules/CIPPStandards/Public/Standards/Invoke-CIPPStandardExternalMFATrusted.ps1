@@ -13,6 +13,8 @@ function Invoke-CIPPStandardExternalMFATrusted {
         CAT
             Entra (AAD) Standards
         TAG
+            "ZTNA21803"
+            "ZTNA21804"
         EXECUTIVETEXT
             Allows external partners and vendors to use their own organization's multi-factor authentication when accessing company resources, streamlining collaboration while maintaining security standards. This reduces friction for external users while ensuring they still meet authentication requirements.
         ADDEDCOMPONENT
@@ -24,6 +26,9 @@ function Invoke-CIPPStandardExternalMFATrusted {
         POWERSHELLEQUIVALENT
             Update-MgBetaPolicyCrossTenantAccessPolicyDefault
         RECOMMENDEDBY
+        REQUIREDCAPABILITIES
+            "AAD_PREMIUM"
+            "AAD_PREMIUM_P2"
         UPDATECOMMENTBLOCK
             Run the Tools\Update-StandardsComments.ps1 script to update this comment block
     .LINK
@@ -31,6 +36,11 @@ function Invoke-CIPPStandardExternalMFATrusted {
     #>
 
     param($Tenant, $Settings)
+    $TestResult = Test-CIPPStandardLicense -StandardName 'ExternalMFATrusted' -TenantFilter $Tenant -RequiredCapabilities @('AAD_PREMIUM', 'AAD_PREMIUM_P2')
+
+    if ($TestResult -eq $false) {
+        return $true
+    } #we're done.
 
     try {
         $ExternalMFATrusted = (New-GraphGetRequest -uri 'https://graph.microsoft.com/v1.0/policies/crossTenantAccessPolicy/default?$select=inboundTrust' -tenantid $Tenant)

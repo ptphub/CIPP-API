@@ -43,6 +43,7 @@ function Invoke-ExecUpdateDriftDeviation {
                     if ($Deviation.status -eq 'DeniedRemediate') {
                         $Setting = $Deviation.standardName -replace 'standards\.', ''
                         $StandardTemplate = Get-CIPPTenantAlignment -TenantFilter $TenantFilter | Where-Object -Property standardType -EQ 'drift'
+                        $DriftTemplateId = $StandardTemplate.StandardId
                         if ($Setting -like '*IntuneTemplate*') {
                             $Setting = 'IntuneTemplate'
                             $TemplateId = $Deviation.standardName.split('.') | Select-Object -Index 2
@@ -62,7 +63,7 @@ function Invoke-ExecUpdateDriftDeviation {
                                 }
                             }
                             if (-not $MatchedTemplate) {
-                                Write-LogMessage -tenant $TenantFilter -Headers $Request.Headers -API $APINAME -message "Could not find IntuneTemplate $TemplateId in drift standard settings for remediation" -Sev 'Warn'
+                                Write-LogMessage -tenant $TenantFilter -Headers $Request.Headers -API $APINAME -message "Could not find IntuneTemplate $TemplateId in drift standard settings for remediation" -Sev 'Warning'
                             } else {
                                 $MatchedTemplate | Add-Member -MemberType NoteProperty -Name 'remediate' -Value $true -Force
                                 $MatchedTemplate | Add-Member -MemberType NoteProperty -Name 'report' -Value $true -Force
@@ -91,7 +92,8 @@ function Invoke-ExecUpdateDriftDeviation {
                         }
                         $TaskBody = @{
                             TenantFilter  = $TenantFilter
-                            Name          = "One Off Drift Remediation: $Setting - $TenantFilter"
+                            Name          = "One Off Drift Remediation: $Setting - $TenantFilter - $DriftTemplateId"
+                            Tag           = "DriftRemediation_$DriftTemplateId"
                             Command       = @{
                                 value = "Invoke-CIPPStandard$Setting"
                                 label = "Invoke-CIPPStandard$Setting"
@@ -114,7 +116,8 @@ function Invoke-ExecUpdateDriftDeviation {
                         if ($PersistentDeny) {
                             $PersistentTaskBody = @{
                                 TenantFilter  = $TenantFilter
-                                Name          = "Persistent Drift Remediation: $Setting - $TenantFilter"
+                                Name          = "Persistent Drift Remediation: $Setting - $TenantFilter - $DriftTemplateId"
+                                Tag           = "DriftRemediation_$DriftTemplateId"
                                 Command       = @{
                                     value = "Invoke-CIPPStandard$Setting"
                                     label = "Invoke-CIPPStandard$Setting"
@@ -151,7 +154,7 @@ function Invoke-ExecUpdateDriftDeviation {
                             Write-LogMessage -tenant $TenantFilter -Headers $Request.Headers -API $APINAME -message "Deleted Policy with ID $($ID)" -Sev 'Info'
                         } else {
                             "could not find policy with ID $($ID)"
-                            Write-LogMessage -tenant $TenantFilter -Headers $Request.Headers -API $APINAME -message "Could not find Policy with ID $($ID) to delete for remediation" -sev 'Warn'
+                            Write-LogMessage -tenant $TenantFilter -Headers $Request.Headers -API $APINAME -message "Could not find Policy with ID $($ID) to delete for remediation" -sev 'Warning'
                         }
 
 

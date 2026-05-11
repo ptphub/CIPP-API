@@ -25,6 +25,14 @@ function Invoke-CIPPStandardRestrictThirdPartyStorageServices {
             New-MgServicePrincipal and Update-MgServicePrincipal
         RECOMMENDEDBY
             "CIS"
+        REQUIREDCAPABILITIES
+            "SHAREPOINTWAC"
+            "SHAREPOINTSTANDARD"
+            "SHAREPOINTENTERPRISE"
+            "SHAREPOINTENTERPRISE_EDU"
+            "SHAREPOINTENTERPRISE_GOV"
+            "ONEDRIVE_BASIC"
+            "ONEDRIVE_ENTERPRISE"
         UPDATECOMMENTBLOCK
             Run the Tools\Update-StandardsComments.ps1 script to update this comment block
     .LINK
@@ -32,7 +40,7 @@ function Invoke-CIPPStandardRestrictThirdPartyStorageServices {
     #>
 
     param ($Tenant, $Settings)
-    $TestResult = Test-CIPPStandardLicense -StandardName 'ThirdPartyStorageServicesRestricted' -TenantFilter $Tenant -RequiredCapabilities @('SHAREPOINTWAC', 'SHAREPOINTSTANDARD', 'SHAREPOINTENTERPRISE', 'SHAREPOINTENTERPRISE_EDU', 'ONEDRIVE_BASIC', 'ONEDRIVE_ENTERPRISE')
+    $TestResult = Test-CIPPStandardLicense -StandardName 'ThirdPartyStorageServicesRestricted' -TenantFilter $Tenant -RequiredCapabilities @('SHAREPOINTWAC', 'SHAREPOINTSTANDARD', 'SHAREPOINTENTERPRISE', 'SHAREPOINTENTERPRISE_EDU', 'SHAREPOINTENTERPRISE_GOV', 'ONEDRIVE_BASIC', 'ONEDRIVE_ENTERPRISE')
 
     if ($TestResult -eq $false) {
         return $true

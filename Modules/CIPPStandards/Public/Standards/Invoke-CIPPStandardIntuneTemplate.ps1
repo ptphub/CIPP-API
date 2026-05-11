@@ -24,9 +24,10 @@ function Invoke-CIPPStandardIntuneTemplate {
             Deploys standardized device management configurations across all corporate devices, ensuring consistent security policies, application settings, and compliance requirements. This template-based approach streamlines device management while maintaining uniform security standards across the organization.
         ADDEDCOMPONENT
             {"type":"autoComplete","multiple":false,"creatable":false,"required":false,"name":"TemplateList","label":"Select Intune Template","api":{"queryKey":"ListIntuneTemplates-autcomplete","url":"/api/ListIntuneTemplates","labelField":"Displayname","valueField":"GUID","showRefresh":true,"templateView":{"title":"Intune Template","property":"RAWJson","type":"intune"}}}
-            {"type":"autoComplete","multiple":false,"required":false,"creatable":false,"name":"TemplateList-Tags","label":"Or select a package of Intune Templates","api":{"queryKey":"ListIntuneTemplates-tag-autcomplete","url":"/api/ListIntuneTemplates?mode=Tag","labelField":"label","valueField":"value","addedField":{"templates":"templates"}}}
+            {"type":"autoComplete","multiple":false,"required":false,"creatable":false,"name":"TemplateList-Tags","label":"Or select a package of Intune Templates","api":{"queryKey":"ListIntuneTemplates-tag-autcomplete","url":"/api/ListIntuneTemplates?mode=Tag","labelField":"label","valueField":"value"}}
             {"name":"AssignTo","label":"Who should this template be assigned to?","type":"radio","options":[{"label":"Do not assign","value":"On"},{"label":"Assign to all users","value":"allLicensedUsers"},{"label":"Assign to all devices","value":"AllDevices"},{"label":"Assign to all users and devices","value":"AllDevicesAndUsers"},{"label":"Assign to Custom Group","value":"customGroup"}]}
             {"type":"textField","required":false,"name":"customGroup","label":"Enter the custom group name if you selected 'Assign to Custom Group'. Wildcards are allowed."}
+            {"type":"switch","name":"verifyAssignments","label":"Verify policy assignments"}
             {"name":"excludeGroup","label":"Exclude Groups","type":"textField","required":false,"helpText":"Enter the group name(s) to exclude from the assignment. Wildcards are allowed. Multiple group names are comma-seperated."}
             {"type":"textField","required":false,"name":"assignmentFilter","label":"Assignment Filter Name (Optional)","helpText":"Enter the assignment filter name to apply to this policy assignment. Wildcards are allowed."}
             {"name":"assignmentFilterType","label":"Assignment Filter Mode (Optional)","type":"radio","required":false,"helpText":"Choose whether to include or exclude devices matching the filter. Only applies if you specified a filter name above. Defaults to Include if not specified.","options":[{"label":"Include - Assign to devices matching the filter","value":"include"},{"label":"Exclude - Assign to devices NOT matching the filter","value":"exclude"}]}
@@ -74,6 +75,28 @@ function Invoke-CIPPStandardIntuneTemplate {
     $description = $Template.Description
     $RawJSON = $rawJsonFromTemplate
     $TemplateType = $Template.Type
+
+    # Fallback: infer type from RAWJson content when stored template has no Type
+    if (-not $TemplateType) {
+        try {
+            $parsedRaw = $rawJsonFromTemplate | ConvertFrom-Json -ErrorAction SilentlyContinue
+            $odataType = $parsedRaw.'@odata.type'
+            $TemplateType = if ($null -ne $parsedRaw.settings -and $null -ne $parsedRaw.technologies) { 'Catalog' }
+                elseif ($null -ne $parsedRaw.scheduledActionsForRule -or $odataType -match 'CompliancePolicy') { 'deviceCompliancePolicies' }
+                elseif ($odataType -match 'windowsDriverUpdateProfile') { 'windowsDriverUpdateProfiles' }
+                elseif ($odataType -match 'ManagedApp|managedAppProtection') { 'AppProtection' }
+                elseif ($odataType -match 'deviceConfiguration|#microsoft\.graph\.\w+Configuration$') { 'Device' }
+                else { $null }
+        } catch {
+            $TemplateType = $null
+        }
+        if ($TemplateType) {
+            Write-Information "[IntuneTemplate][$Tenant] Inferred template type '$TemplateType' from content for '$displayname'"
+        } else {
+            Write-LogMessage -API 'Standards' -tenant $tenant -message "Intune Template '$displayname' has no Type and type could not be inferred. Re-import the template to fix." -sev 'Error'
+            return $true
+        }
+    }
 
     $AssignmentsMatch = $null
     try {

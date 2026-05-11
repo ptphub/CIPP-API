@@ -7,8 +7,8 @@ function Invoke-CIPPStandardSPDirectSharing {
     .SYNOPSIS
         (Label) Default sharing to Direct users
     .DESCRIPTION
-        (Helptext) This standard has been deprecated in favor of the Default Sharing Link standard.
-        (DocsDescription) This standard has been deprecated in favor of the Default Sharing Link standard.
+        (Helptext) This standard has been deprecated in favor of the Default Sharing Link standard. 
+        (DocsDescription) This standard has been deprecated in favor of the Default Sharing Link standard. 
     .NOTES
         CAT
             SharePoint Standards
@@ -25,6 +25,14 @@ function Invoke-CIPPStandardSPDirectSharing {
         RECOMMENDEDBY
             "CIS"
             "CIPP"
+        REQUIREDCAPABILITIES
+            "SHAREPOINTWAC"
+            "SHAREPOINTSTANDARD"
+            "SHAREPOINTENTERPRISE"
+            "SHAREPOINTENTERPRISE_EDU"
+            "SHAREPOINTENTERPRISE_GOV"
+            "ONEDRIVE_BASIC"
+            "ONEDRIVE_ENTERPRISE"
         UPDATECOMMENTBLOCK
             Run the Tools\Update-StandardsComments.ps1 script to update this comment block
     .LINK
@@ -32,7 +40,7 @@ function Invoke-CIPPStandardSPDirectSharing {
     #>
 
     param($Tenant, $Settings)
-    $TestResult = Test-CIPPStandardLicense -StandardName 'SPDirectSharing' -TenantFilter $Tenant -RequiredCapabilities @('SHAREPOINTWAC', 'SHAREPOINTSTANDARD', 'SHAREPOINTENTERPRISE', 'SHAREPOINTENTERPRISE_EDU', 'ONEDRIVE_BASIC', 'ONEDRIVE_ENTERPRISE')
+    $TestResult = Test-CIPPStandardLicense -StandardName 'SPDirectSharing' -TenantFilter $Tenant -RequiredCapabilities @('SHAREPOINTWAC', 'SHAREPOINTSTANDARD', 'SHAREPOINTENTERPRISE', 'SHAREPOINTENTERPRISE_EDU', 'SHAREPOINTENTERPRISE_GOV', 'ONEDRIVE_BASIC', 'ONEDRIVE_ENTERPRISE')
 
     if ($TestResult -eq $false) {
         return $true

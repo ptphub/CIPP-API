@@ -8,6 +8,34 @@ function Invoke-ExecGraphRequestProfile {
     [CmdletBinding()]
     param($Request, $TriggerMetadata)
 
+    $Mode = $Request.Query.Mode
+
+    # ── Diagnostics-only mode ───────────────────────────────────────────
+    # Returns a point-in-time snapshot of the CIPPSharp DLL runtime state —
+    # pool usage counters, top hosts, status code distribution, and the
+    # CIPPTokenCache entry count. No Graph/EXO calls, no tenant required.
+    if ($Mode -eq 'Diagnostics') {
+        $Reset = [System.Convert]::ToBoolean($Request.Query.Reset ?? $false)
+
+        $RestDiag  = [CIPP.CIPPRestClient]::GetDiagnostics() | ConvertFrom-Json
+        $CacheDiag = [CIPP.CIPPTokenCache]::GetDiagnostics()  | ConvertFrom-Json
+
+        if ($Reset) {
+            [CIPP.CIPPRestClient]::ResetDiagnostics()
+        }
+
+        return [HttpResponseContext]@{
+            StatusCode = 200
+            Body       = [PSCustomObject]@{
+                Mode              = 'Diagnostics'
+                CapturedAt        = (Get-Date).ToUniversalTime().ToString('o')
+                CountersReset     = $Reset
+                RestClient        = $RestDiag
+                TokenCache        = $CacheDiag
+            }
+        }
+    }
+
     $TenantFilter = $Request.Query.tenantFilter
     $Endpoint = $Request.Query.Endpoint
     if (!$TenantFilter -or !$Endpoint) {
@@ -67,30 +95,24 @@ function Invoke-ExecGraphRequestProfile {
     $sw.Stop()
     Add-Timing 'GetCIPPAuthentication' "EnvPresent=$envPresent SetFromProfile=$($env:SetFromProfile)" $sw.Elapsed.TotalMilliseconds
 
-    # ── 4. CIPPCore module state ────────────────────────────────────────
+    # ── 4. CIPPTokenCache state ──────────────────────────────────────────
     $sw.Restart()
     $scope = 'https://graph.microsoft.com/.default'
-    # Match Get-GraphToken's key format: $asApp is $null when not passed, so key ends with empty string
-    $TokenKeyNull = '{0}-{1}-{2}' -f $TenantFilter, $scope, $null
-    $TokenKeyFalse = '{0}-{1}-{2}' -f $TenantFilter, $scope, $false
-    $coreState = & (Get-Module CIPPCore) {
-        $keyNull = $args[0]
-        $keyFalse = $args[1]
-        $cachedNull = $script:AccessTokens.$keyNull
-        $cachedFalse = $script:AccessTokens.$keyFalse
-        $now = [int](Get-Date -UFormat %s -Millisecond 0)
-        @{
-            TokenCachedNull  = [bool]($cachedNull -and $now -lt $cachedNull.expires_on)
-            TokenCachedFalse = [bool]($cachedFalse -and $now -lt $cachedFalse.expires_on)
-            CacheKeys        = if ($script:AccessTokens) { @($script:AccessTokens.Keys) } else { @() }
-            CacheType        = if ($script:AccessTokens) { $script:AccessTokens.GetType().Name } else { 'null' }
-            CacheCount       = if ($script:AccessTokens) { $script:AccessTokens.Count } else { 0 }
-            LoginSession     = [bool]$script:LoginWebSession
-            GraphSession     = [bool]$script:GraphWebSession
-        }
-    } $TokenKeyNull $TokenKeyFalse
+    $CacheClientId = [string]$env:ApplicationID
+    $CacheKeyRefresh = [CIPP.CIPPTokenCache]::BuildKey([string]$TenantFilter, [string]$scope, $false, $CacheClientId, 'refresh_token')
+    $CacheKeyClient = [CIPP.CIPPTokenCache]::BuildKey([string]$TenantFilter, [string]$scope, $true, $CacheClientId, 'client_credentials')
+    $LookupRefresh = [CIPP.CIPPTokenCache]::Lookup($CacheKeyRefresh, 120)
+    $LookupClient  = [CIPP.CIPPTokenCache]::Lookup($CacheKeyClient, 120)
+    $CacheDiag     = [CIPP.CIPPTokenCache]::GetDiagnostics() | ConvertFrom-Json
+    $coreState = @{
+        TokenCachedRefresh = $LookupRefresh.Found
+        TokenCachedClient  = $LookupClient.Found
+        CacheCount         = $CacheDiag.Entries
+        CacheType          = 'CIPPTokenCache'
+        CacheDiagnostics   = $CacheDiag
+    }
     $sw.Stop()
-    Add-Timing 'CoreModuleState' "CacheCount=$($coreState.CacheCount) Keys=$($coreState.CacheKeys -join ';') LoginSession=$($coreState.LoginSession) GraphSession=$($coreState.GraphSession)" $sw.Elapsed.TotalMilliseconds
+    Add-Timing 'CIPPTokenCacheState' "CacheCount=$($coreState.CacheCount) RefreshCached=$($coreState.TokenCachedRefresh) ClientCached=$($coreState.TokenCachedClient)" $sw.Elapsed.TotalMilliseconds
 
     # ── 5. Get-AuthorisedRequest ────────────────────────────────────────
     $sw.Restart()
@@ -112,16 +134,25 @@ function Invoke-ExecGraphRequestProfile {
         Headers     = $headers
         ContentType = 'application/json; charset=utf-8'
     }
-    if ($coreState.GraphSession) {
-        $graphSess = & (Get-Module CIPPCore) { $script:GraphWebSession }
-        if ($graphSess) { $directRequest.WebSession = $graphSess }
-    }
     $directResult = Invoke-RestMethod @directRequest
     $directCount = if ($directResult.value) { $directResult.value.Count } else { 1 }
     $sw.Stop()
     Add-Timing 'DirectInvokeRestMethod' "ResultCount=$directCount" $sw.Elapsed.TotalMilliseconds
 
-    # ── 8. Get-GraphRequestList (full wrapper) ──────────────────────────
+    # ── 8. Invoke-CIPPRestMethod (pooled C# client — no wrapper) ───────
+    $sw.Restart()
+    $pooledRequest = @{
+        Uri         = $GraphUrl
+        Method      = 'GET'
+        Headers     = $headers
+        ContentType = 'application/json; charset=utf-8'
+    }
+    $pooledResult = Invoke-CIPPRestMethod @pooledRequest
+    $pooledCount = if ($pooledResult.value) { $pooledResult.value.Count } else { 1 }
+    $sw.Stop()
+    Add-Timing 'PooledCIPPRestMethod' "ResultCount=$pooledCount" $sw.Elapsed.TotalMilliseconds
+
+    # ── 9. Get-GraphRequestList (full wrapper) ──────────────────────────
     $sw.Restart()
     $ManualPagination = [System.Boolean]$Request.Query.manualPagination
     $listParams = @{
@@ -137,22 +168,19 @@ function Invoke-ExecGraphRequestProfile {
     $sw.Stop()
     Add-Timing 'GetGraphRequestList' "ResultCount=$listCount" $sw.Elapsed.TotalMilliseconds
 
-    # ── 9. CIPPCore state after calls ───────────────────────────────────
+    # ── 10. CIPPTokenCache state after calls ─────────────────────────────
     $sw.Restart()
-    $coreStateAfter = & (Get-Module CIPPCore) {
-        $keyNull = $args[0]
-        $now = [int](Get-Date -UFormat %s -Millisecond 0)
-        $cached = $script:AccessTokens.$keyNull
-        @{
-            TokenCached  = [bool]($cached -and $now -lt $cached.expires_on)
-            CacheCount   = if ($script:AccessTokens) { $script:AccessTokens.Count } else { 0 }
-            CacheKeys    = if ($script:AccessTokens) { @($script:AccessTokens.Keys) } else { @() }
-            LoginSession = [bool]$script:LoginWebSession
-            GraphSession = [bool]$script:GraphWebSession
-        }
-    } $TokenKeyNull
+    $LookupRefreshAfter = [CIPP.CIPPTokenCache]::Lookup($CacheKeyRefresh, 120)
+    $LookupClientAfter  = [CIPP.CIPPTokenCache]::Lookup($CacheKeyClient, 120)
+    $CacheDiagAfter     = [CIPP.CIPPTokenCache]::GetDiagnostics() | ConvertFrom-Json
+    $coreStateAfter = @{
+        TokenCachedRefresh = $LookupRefreshAfter.Found
+        TokenCachedClient  = $LookupClientAfter.Found
+        CacheCount         = $CacheDiagAfter.Entries
+        CacheDiagnostics   = $CacheDiagAfter
+    }
     $sw.Stop()
-    Add-Timing 'CoreStateAfter' "TokenCached=$($coreStateAfter.TokenCached) CacheCount=$($coreStateAfter.CacheCount) LoginSession=$($coreStateAfter.LoginSession) GraphSession=$($coreStateAfter.GraphSession)" $sw.Elapsed.TotalMilliseconds
+    Add-Timing 'CIPPTokenCacheStateAfter' "CacheCount=$($coreStateAfter.CacheCount) RefreshCached=$($coreStateAfter.TokenCachedRefresh) ClientCached=$($coreStateAfter.TokenCachedClient)" $sw.Elapsed.TotalMilliseconds
 
     $OverallSw.Stop()
     Add-Timing 'Total' 'End-to-end' $OverallSw.Elapsed.TotalMilliseconds

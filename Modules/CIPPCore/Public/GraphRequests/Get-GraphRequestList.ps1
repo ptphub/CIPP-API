@@ -80,7 +80,8 @@ function Get-GraphRequestList {
         [string]$ReverseTenantLookupProperty = 'tenantId',
         [boolean]$AsApp = $false,
         [string]$Caller = 'Get-GraphRequestList',
-        [switch]$UseBatchExpand
+        [switch]$UseBatchExpand,
+        [switch]$RawJsonArray
     )
 
     $SingleTenantThreshold = 8000
@@ -198,7 +199,7 @@ function Get-GraphRequestList {
             $Type = 'Queue'
             Write-Information "Cached: $(($Rows | Measure-Object).Count) rows (Type: $($Type))"
             $QueueReference = '{0}-{1}' -f $TenantFilter, $PartitionKey
-            $RunningQueue = Get-CIPPQueueData -Reference $QueueReference | Where-Object { $_.Status -ne 'Completed' -and $_.Status -ne 'Failed' }
+            $RunningQueue = Get-CIPPQueueData -Reference $QueueReference | Where-Object { $_.Status -ne 'Completed' -and $_.Status -ne 'Failed' -and $_.Reference -eq $QueueReference }
         } elseif (!$SkipCache.IsPresent -and !$ClearCache.IsPresent -and !$CountOnly.IsPresent) {
             if ($TenantFilter -eq 'AllTenants' -or $Count -gt $SingleTenantThreshold) {
                 $Table = Get-CIPPTable -TableName $TableName
@@ -213,7 +214,7 @@ function Get-GraphRequestList {
                 $Type = 'Cache'
                 Write-Information "Table: $TableName | PK: $PartitionKey | Cached: $(($Rows | Measure-Object).Count) rows (Type: $($Type))"
                 $QueueReference = '{0}-{1}' -f $TenantFilter, $PartitionKey
-                $RunningQueue = Get-CIPPQueueData -Reference $QueueReference | Where-Object { $_.Status -notmatch 'Completed' -and $_.Status -notmatch 'Failed' }
+                $RunningQueue = Get-CIPPQueueData -Reference $QueueReference | Where-Object { $_.Status -notmatch 'Completed' -and $_.Status -notmatch 'Failed' -and $_.Reference -eq $QueueReference }
             }
         }
     } catch {
@@ -293,6 +294,7 @@ function Get-GraphRequestList {
                             $InputObject = @{
                                 OrchestratorName = 'GraphRequestOrchestrator'
                                 Batch            = @($Batch)
+                                Reference        = $QueueReference
                             }
                             #Write-Information  ($InputObject | ConvertTo-Json -Depth 5)
                             $InstanceId = Start-CIPPOrchestrator -InputObject $InputObject
@@ -423,6 +425,22 @@ function Get-GraphRequestList {
             }
         }
     } else {
+        if ($RawJsonArray.IsPresent) {
+            # Fast path: concatenate raw JSON strings without deserialization. This is much faster and uses less memory when no post-processing is needed, especially for large datasets.
+            $JsonParts = [System.Collections.Generic.List[string]]::new()
+            foreach ($Row in $Rows) {
+                if ($Row.Data) {
+                    $d = $Row.Data.Trim()
+                    if ($d.Length -gt 2 -and $d[0] -eq '[' -and $d[-1] -eq ']') {
+                        $JsonParts.Add($d.Substring(1, $d.Length - 2))
+                    } elseif ($d.Length -gt 0 -and $d -ne '[]') {
+                        $JsonParts.Add($d)
+                    }
+                }
+            }
+            return '[' + ($JsonParts -join ',') + ']'
+        }
+
         foreach ($Row in $Rows) {
             if ($Row.Data) {
                 try {
