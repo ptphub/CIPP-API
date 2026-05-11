@@ -14,6 +14,7 @@ function Invoke-AddOfficeApp {
     $APIName = $Request.Params.CIPPEndpoint
     if ('AllTenants' -in $Tenants) { $Tenants = (Get-Tenants).defaultDomainName }
     $AssignTo = $Request.Body.AssignTo -eq 'customGroup' ? $Request.Body.CustomGroup : $Request.Body.AssignTo
+    $ExcludeGroup = $Request.Body.excludeGroup
 
     $Results = foreach ($Tenant in $Tenants) {
         try {
@@ -107,7 +108,7 @@ function Invoke-AddOfficeApp {
             }
             Write-LogMessage -headers $Headers -API $APIName -tenant $($Tenant) -message "Added Office profile to $($Tenant)" -Sev 'Info'
             if ($AssignTo -and $AssignTo -ne 'On') {
-                Set-CIPPAssignedApplication -ApplicationId $OfficeAppID.id -TenantFilter $Tenant -Intent 'Required' -GroupName $AssignTo -APIName $APIName -Headers $Headers
+                Set-CIPPAssignedApplication -ApplicationId $OfficeAppID.id -TenantFilter $Tenant -Intent 'Required' -GroupName $AssignTo -ExcludeGroup $ExcludeGroup -APIName $APIName -Headers $Headers
                 Write-LogMessage -headers $Headers -API $APIName -tenant $($Tenant) -message "Assigned Office to $AssignTo" -Sev 'Info'
             }
             "Successfully added Office App for $($Tenant)"
