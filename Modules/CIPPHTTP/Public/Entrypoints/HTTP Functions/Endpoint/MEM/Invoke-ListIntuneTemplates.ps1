@@ -103,7 +103,7 @@ function Invoke-ListIntuneTemplates {
                     }
                 }
             }
-            $Tpl | Add-Member -NotePropertyName 'usedInTemplates' -NotePropertyValue @($Usage) -Force
+            $Tpl | Add-Member -NotePropertyName 'usage' -NotePropertyValue @($Usage) -Force
         }
     } else {
         if ($Request.query.mode -eq 'Tag') {
