@@ -21,7 +21,6 @@ function Get-CippAuditLogSearchResults {
     process {
         $GraphRequest = @{
             Uri      = ('https://graph.microsoft.com/beta/security/auditLog/queries/{0}/records?$top=999&$count=true' -f $QueryId)
-            Method   = 'GET'
             AsApp    = $true
             tenantid = $TenantFilter
         }
@@ -29,6 +28,8 @@ function Get-CippAuditLogSearchResults {
             $GraphRequest.CountOnly = $true
         }
 
-        New-GraphGetRequest @GraphRequest -ErrorAction Stop
+        # Deliberately unsorted: Sort-Object blocks until the entire window is in memory, and
+        # no caller depends on the order.
+        New-GraphGetRequest @GraphRequest -Stream -ErrorAction Stop
     }
 }
